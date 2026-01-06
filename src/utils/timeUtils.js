@@ -1,0 +1,1 @@
+export const minutesToHours = (min) => min / 60;

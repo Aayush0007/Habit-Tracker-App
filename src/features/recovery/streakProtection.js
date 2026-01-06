@@ -1,0 +1,1 @@
+export const protectStreak = (streak, isRecovery) => isRecovery ? streak : 0; // Simplified
