@@ -1,48 +1,69 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { initDB } from '../db/indexedDB/dbConfig';
 import { generateDailySessions } from '../features/studySessions/sessionLogic';
 
-export const useStudySessions = (date = new Date().toISOString().split('T')[0]) => {
+export const useStudySessions = (dateInput) => {
+  const date = dateInput || new Date().toISOString().split('T')[0];
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Load from Database
-  useEffect(() => {
-    const loadData = async () => {
-      const db = await initDB();
-      const allSessions = await db.getAll('study_sessions');
-      const dailySessions = allSessions.filter(s => s.date === date);
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    const db = await initDB();
+    
+    // Fetch and filter for the specific date
+    const allSessions = await db.getAll('study_sessions');
+    const dailySessions = allSessions
+      .filter(s => s.date === date)
+      .sort((a, b) => a.sessionNumber - b.sessionNumber);
 
-      if (dailySessions.length > 0) {
-        setSessions(dailySessions.sort((a, b) => a.sessionNumber - b.sessionNumber));
-      } else {
-        const newSessions = generateDailySessions(date);
-        setSessions(newSessions);
-      }
-      setLoading(false);
-    };
-    loadData();
+    if (dailySessions.length > 0) {
+      // If sessions exist, load them
+      setSessions(dailySessions);
+    } else {
+      // CRITICAL FIX: Generate AND Save immediately to DB
+      const newSessions = generateDailySessions(date);
+      
+      const tx = db.transaction('study_sessions', 'readwrite');
+      await Promise.all([
+        ...newSessions.map(s => tx.store.put(s)),
+        tx.done
+      ]);
+      
+      setSessions(newSessions);
+    }
+    setLoading(false);
   }, [date]);
 
-  // Toggle Checkbox Logic
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Existing toggle and update logic...
   const toggleSession = async (id) => {
-    const updated = sessions.map(s => 
-      s.id === id ? { ...s, status: s.status === 'completed' ? 'pending' : 'completed' } : s
-    );
+    const updated = sessions.map(s => {
+      if (s.id === id) {
+        const newItem = { ...s, status: s.status === 'completed' ? 'pending' : 'completed' };
+        saveToDB(newItem);
+        return newItem;
+      }
+      return s;
+    });
     setSessions(updated);
-    saveToDB(updated.find(s => s.id === id));
   };
 
-  // Update Topic Text Logic
   const updateSessionTopic = async (id, newTopic) => {
-    const updated = sessions.map(s => 
-      s.id === id ? { ...s, topic: newTopic } : s
-    );
+    const updated = sessions.map(s => {
+      if (s.id === id) {
+        const newItem = { ...s, topic: newTopic };
+        saveToDB(newItem);
+        return newItem;
+      }
+      return s;
+    });
     setSessions(updated);
-    saveToDB(updated.find(s => s.id === id));
   };
 
-  // Internal Helper to save to IndexedDB
   const saveToDB = async (session) => {
     const db = await initDB();
     await db.put('study_sessions', session);

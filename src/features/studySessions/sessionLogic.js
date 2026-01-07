@@ -20,15 +20,15 @@ export const calculateStudyStatus = (totalMinutes) => {
 };
 
 // 3. THIS GENERATES THE 6 SLOTS
+// src/features/studySessions/sessionLogic.js
+
 export const generateDailySessions = (date) => {
   return Array.from({ length: 6 }, (_, i) => ({
-    id: `${date}-s${i + 1}`,
+    // Stable ID tied to date and session number
+    id: `${date}-session-${i + 1}`,
     date: date,
     sessionNumber: i + 1,
-    actualDuration: 0,
     status: 'pending', 
     topic: '',
-    focusLevel: 2,
-    notes: ''
   }));
 };

@@ -12,7 +12,7 @@ export default defineConfig({
         short_name: 'Warrior',
         theme_color: '#020617',
         icons: [
-          { src: 'favicon.ico', sizes: '64x64', type: 'image/x-icon' }
+          { src: 'Logo.png', sizes: '64x64', type: 'image/x-icon' }
         ]
       }
     })
