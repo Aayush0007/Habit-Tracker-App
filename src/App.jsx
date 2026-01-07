@@ -10,7 +10,7 @@ import CalendarView from './pages/Calendar/CalendarView';
 import MockTests from './pages/MockTests/MockTests';
 import WeeklyReview from './pages/WeeklyReview/WeeklyReview';
 import Settings from './pages/Settings/Settings';
-
+import SyllabusTracker from './pages/Syllabus/SyllabusTracker';
 function App() {
   return (
     <Router>
@@ -33,6 +33,7 @@ function App() {
           <Route path="/mocks" element={<MockTests />} />
           <Route path="/review" element={<WeeklyReview />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/syllabus" element={<SyllabusTracker />} />
         </Routes>
         
         {/* Navbar stays OUTSIDE because it is a global UI element */}
