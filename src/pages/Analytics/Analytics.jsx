@@ -1,46 +1,68 @@
 import React, { useState, useEffect } from "react";
 import {
-  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area,
-  Radar, RadarChart, PolarGrid, PolarAngleAxis
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  AreaChart,
+  Area,
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
 } from "recharts";
 import { initDB } from "../../db/indexedDB/dbConfig";
-import { Trophy, Target, Activity, Wifi, WifiOff } from "lucide-react";
+import { Trophy, Target, Activity, Wifi, WifiOff, Filter } from "lucide-react";
 
 const Analytics = () => {
   const [mockData, setMockData] = useState([]);
   const [stats, setStats] = useState({ avg: 0, best: 0, total: 0 });
   const [subjectAverages, setSubjectAverages] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [filter, setFilter] = useState("All");
 
   useEffect(() => {
     const handleStatus = () => setIsOnline(navigator.onLine);
-    window.addEventListener('online', handleStatus);
-    window.addEventListener('offline', handleStatus);
+    window.addEventListener("online", handleStatus);
+    window.addEventListener("offline", handleStatus);
 
     const getData = async () => {
       const db = await initDB();
       const allMocks = await db.getAll("mock_exams");
+      
+      // Filter logic for multiple exams
+      const filteredMocks = filter === "All" 
+        ? allMocks 
+        : allMocks.filter((m) => m.category === filter);
 
-      const sortedMocks = allMocks.sort((a, b) => new Date(a.date) - new Date(b.date));
-      const scores = allMocks.map((m) => Number(m.score));
+      const sortedMocks = [...filteredMocks].sort(
+        (a, b) => new Date(a.date) - new Date(b.date)
+      );
 
-      // Calculate Subject Proficiencies
-      const sums = { quants: 0, reasoning: 0, english: 0 };
-      allMocks.forEach(m => {
-        sums.quants += (m.sections?.quants || 0);
-        sums.reasoning += (m.sections?.reasoning || 0);
-        sums.english += (m.sections?.english || 0);
+      const scores = filteredMocks.map((m) => Number(m.score));
+
+      // Calculate Subject Proficiencies (Including GS for SSC/AFCAT)
+      const sums = { quants: 0, reasoning: 0, english: 0, gs: 0 };
+      filteredMocks.forEach((m) => {
+        sums.quants += m.sections?.quants || 0;
+        sums.reasoning += m.sections?.reasoning || 0;
+        sums.english += m.sections?.english || 0;
+        sums.gs += m.sections?.gs || 0;
       });
 
-      const count = allMocks.length || 1;
+      const count = filteredMocks.length || 1;
       setSubjectAverages([
-        { subject: "Quants", score: (sums.quants / count).toFixed(1), fullMark: 35 },
-        { subject: "Reasoning", score: (sums.reasoning / count).toFixed(1), fullMark: 35 },
-        { subject: "English", score: (sums.english / count).toFixed(1), fullMark: 30 },
+        { subject: "Quants", score: (sums.quants / count).toFixed(1) },
+        { subject: "Reasoning", score: (sums.reasoning / count).toFixed(1) },
+        { subject: "English", score: (sums.english / count).toFixed(1) },
+        { subject: "GS/GA", score: (sums.gs / count).toFixed(1) },
       ]);
 
       setStats({
-        avg: scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : 0,
+        avg: scores.length
+          ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1)
+          : 0,
         best: scores.length ? Math.max(...scores) : 0,
         total: scores.length,
       });
@@ -49,38 +71,60 @@ const Analytics = () => {
 
     getData();
     return () => {
-      window.removeEventListener('online', handleStatus);
-      window.removeEventListener('offline', handleStatus);
+      window.removeEventListener("online", handleStatus);
+      window.removeEventListener("offline", handleStatus);
     };
-  }, []);
+  }, [filter]); // Re-run when filter changes
 
   return (
-    <div className="p-6 space-y-8 pb-24">
+    <div className="p-6 space-y-6 pb-24">
       <header className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Performance Insights</h1>
-          <p className="text-slate-400 text-sm">Data-driven preparation for 2026</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Analytics</h1>
+          <div className="flex items-center gap-2 mt-1">
+            <Filter size={12} className="text-slate-500" />
+            <select 
+              value={filter} 
+              onChange={(e) => setFilter(e.target.value)}
+              className="bg-transparent text-xs font-bold text-blue-400 outline-none cursor-pointer"
+            >
+              <option value="All">All Exams</option>
+              <optgroup label="Banking">
+                <option value="SBI PO Pre">SBI PO Pre</option>
+                <option value="SBI PO Mains">SBI PO Mains</option>
+                <option value="IBPS PO Pre">IBPS PO Pre</option>
+                <option value="RBI Grade B">RBI Grade B</option>
+              </optgroup>
+              <optgroup label="SSC/AFCAT/NTPC">
+                <option value="SSC CGL/CHSL">SSC CGL/CHSL</option>
+                <option value="AFCAT">AFCAT</option>
+                <option value="RRB NTPC">RRB NTPC</option>
+                <option value="RPSC Computer Inst.">RPSC Computer Inst.</option>
+              </optgroup>
+            </select>
+          </div>
         </div>
-        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold ${isOnline ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-          {isOnline ? <Wifi size={12}/> : <WifiOff size={12}/>}
-          {isOnline ? 'SYNCED' : 'OFFLINE'}
+        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold ${isOnline ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"}`}>
+          {isOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
+          {isOnline ? "SYNCED" : "OFFLINE"}
         </div>
       </header>
 
       <div className="grid grid-cols-3 gap-3">
         <StatCard icon={<Activity size={16} />} label="Avg Score" value={stats.avg} color="text-blue-400" />
         <StatCard icon={<Trophy size={16} />} label="Best" value={stats.best} color="text-emerald-400" />
-        <StatCard icon={<Target size={16} />} label="Total Mocks" value={stats.total} color="text-purple-400" />
+        <StatCard icon={<Target size={16} />} label="Total" value={stats.total} color="text-purple-400" />
       </div>
 
-      {/* Subject Radar Chart */}
       <section className="card bg-slate-900 border-slate-800 p-4">
-        <h3 className="text-xs font-black text-slate-500 uppercase mb-6 tracking-widest">Sectional Proficiency</h3>
+        <h3 className="text-xs font-black text-slate-500 uppercase mb-6 tracking-widest text-center">
+          {filter} Proficiency
+        </h3>
         <div className="h-[250px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart cx="50%" cy="50%" outerRadius="80%" data={subjectAverages}>
               <PolarGrid stroke="#1e293b" />
-              <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+              <PolarAngleAxis dataKey="subject" tick={{ fill: "#94a3b8", fontSize: 10 }} />
               <Radar
                 name="Proficiency"
                 dataKey="score"
@@ -94,9 +138,8 @@ const Analytics = () => {
         </div>
       </section>
 
-      {/* Trend Chart */}
       <section className="card bg-slate-900 border-slate-800 p-4">
-        <h3 className="text-xs font-black text-slate-500 uppercase mb-6 tracking-widest">Score Trend</h3>
+        <h3 className="text-xs font-black text-slate-500 uppercase mb-6 tracking-widest text-center">Score Trend: {filter}</h3>
         <div className="h-[200px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={mockData}>
@@ -109,21 +152,21 @@ const Analytics = () => {
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
               <XAxis dataKey="date" hide />
               <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: "8px" }}
-              />
-              <Area type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} fill="url(#colorScore)" />
+              <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: "8px" }} />
+              <Area type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorScore)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </section>
-      
+
       <div className="card bg-gradient-to-r from-slate-900 to-slate-800 border-slate-700 p-4">
         <p className="text-[10px] font-black text-slate-500 uppercase mb-2 italic">Smart Mentor Insight</p>
         <p className="text-sm text-slate-300 leading-relaxed">
-          {mockData.length < 3 ? "Complete 3 mocks to unlock AI insights." : 
-           subjectAverages[0]?.score < 20 ? "Your Quants score is below average. Prioritize 'Data Interpretation' in your next study block." :
-           "You are maintaining good balance. Focus on reducing time per question in Reasoning."}
+          {mockData.length < 3
+            ? "Log at least 3 mocks in this category to unlock specific insights."
+            : subjectAverages[0]?.score < 20
+            ? `Your ${filter} Quants score is below target. Review weak areas immediately.`
+            : `Maintaining steady progress in ${filter}. Focus on speed to break your current plateau.`}
         </p>
       </div>
     </div>

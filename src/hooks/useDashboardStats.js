@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { initDB } from '../db/indexedDB/dbConfig';
 import { calculateTotalStudyHours, calculateStudyStatus } from '../features/studySessions/sessionLogic';
-import { SYLLABUS } from '../data/syllabus'; // FIXED: Changed from SYLLABUS_DATA to SYLLABUS
+import { SYLLABUS } from '../data/syllabus';
 
-export const useDashboardStats = (date = new Date().toISOString().split('T')[0]) => {
+export const useDashboardStats = (activeExam = 'SBI PO Pre', date = new Date().toISOString().split('T')[0]) => {
   const [stats, setStats] = useState({
     totalHours: 0,
     status: { label: 'Missed', color: 'text-rose-400' },
@@ -19,26 +19,47 @@ export const useDashboardStats = (date = new Date().toISOString().split('T')[0])
       try {
         const db = await initDB();
         
-        // 1. Study Hours logic
+        // 1. Study Hours (Daily)
         const allSessions = await db.getAll('study_sessions');
         const todaySessions = allSessions.filter(s => s.date === date);
         const hours = calculateTotalStudyHours(todaySessions);
         
-        // 2. Habits logic
+        // 2. Habits (Daily)
         const todayLog = await db.get('daily_logs', date);
 
-        // 3. Syllabus Readiness logic
+        // 3. Exam-Specific Syllabus Readiness
         const completedSyllabus = await db.getAll('syllabus_progress');
-        const totalTopics = Object.values(SYLLABUS).flat().length;
-        const syllabusPercent = totalTopics > 0 ? (completedSyllabus.length / totalTopics) * 100 : 0;
+        
+        // Define which categories apply to which exam type
+        let relevantCategories = ["Banking Core (Quants/Reason/Eng)"];
+        if (activeExam.includes('SSC') || activeExam.includes('AFCAT') || activeExam.includes('NTPC')) {
+          relevantCategories.push("SSC & AFCAT (Advance/GS)");
+        }
+        if (activeExam.includes('RBI') || activeExam.includes('SEBI') || activeExam.includes('NABARD')) {
+          relevantCategories.push("Regulatory (RBI/SEBI/NABARD)");
+        }
+        if (activeExam.includes('Comp')) {
+          relevantCategories.push("Computer & Technical");
+        }
 
-        // 4. Mock Average logic
+        const relevantTopics = Object.entries(SYLLABUS)
+          .filter(([category]) => relevantCategories.includes(category))
+          .flatMap(([_, topics]) => topics);
+
+        const completedCount = completedSyllabus.filter(item => 
+          relevantTopics.includes(item.topicName)
+        ).length;
+
+        const syllabusPercent = relevantTopics.length > 0 ? (completedCount / relevantTopics.length) * 100 : 0;
+
+        // 4. Exam-Specific Mock Average
         const allMocks = await db.getAll('mock_exams');
-        const avgMockScore = allMocks.length > 0 
-          ? allMocks.reduce((sum, m) => sum + Number(m.score), 0) / allMocks.length 
+        const examSpecificMocks = allMocks.filter(m => m.category === activeExam);
+        const avgMockScore = examSpecificMocks.length > 0 
+          ? examSpecificMocks.reduce((sum, m) => sum + Number(m.score), 0) / examSpecificMocks.length 
           : 0;
 
-        // Weighted Readiness: 60% Syllabus Coverage + 40% Mock Avg
+        // Weighted Readiness: 60% Syllabus + 40% Mock Performance
         const readinessScore = (syllabusPercent * 0.6) + (avgMockScore * 0.4);
 
         setStats({
@@ -57,7 +78,7 @@ export const useDashboardStats = (date = new Date().toISOString().split('T')[0])
     };
 
     fetchStats();
-  }, [date]);
+  }, [date, activeExam]); // Re-calculate when the exam target changes
 
   return stats;
 };
