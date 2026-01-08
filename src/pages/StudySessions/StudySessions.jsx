@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, RotateCcw } from 'lucide-react'; // Added icons for the timer
+import { Play, Pause, RotateCcw } from 'lucide-react';
 import SessionCard from "./SessionCard";
 import { useStudySessions } from "../../hooks/useStudySessions";
 import { calculateTotalStudyHours } from "../../features/studySessions/sessionLogic";
@@ -7,9 +7,23 @@ import { calculateTotalStudyHours } from "../../features/studySessions/sessionLo
 const StudySessions = () => {
   const { sessions, toggleSession, updateSessionTopic, loading } = useStudySessions();
 
-  // --- TIMER LOGIC START ---
-  const [timeLeft, setTimeLeft] = useState(120 * 60); // 120 minutes in seconds
-  const [isActive, setIsActive] = useState(false);
+  // --- PERSISTENT TIMER LOGIC START ---
+  // Initialize from localStorage or default to 120 mins
+  const [timeLeft, setTimeLeft] = useState(() => {
+    const savedTime = localStorage.getItem('studyTimer_timeLeft');
+    return savedTime ? parseInt(savedTime, 10) : 120 * 60;
+  });
+  
+  const [isActive, setIsActive] = useState(() => {
+    const savedActive = localStorage.getItem('studyTimer_isActive');
+    return savedActive === 'true';
+  });
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('studyTimer_timeLeft', timeLeft);
+    localStorage.setItem('studyTimer_isActive', isActive);
+  }, [timeLeft, isActive]);
 
   useEffect(() => {
     let interval = null;
@@ -37,6 +51,8 @@ const StudySessions = () => {
   const resetTimer = () => {
     setIsActive(false);
     setTimeLeft(120 * 60);
+    localStorage.removeItem('studyTimer_timeLeft');
+    localStorage.removeItem('studyTimer_isActive');
   };
   // --- TIMER LOGIC END ---
 
@@ -57,7 +73,6 @@ const StudySessions = () => {
         </div>
       </header>
 
-      {/* --- TIMER UI SECTION --- */}
       <section className="card bg-slate-900 border-slate-800 p-6 flex flex-col items-center justify-center space-y-4 shadow-xl">
         <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Focus Timer</div>
         <div className="text-6xl font-black text-white font-mono tracking-tighter tabular-nums">
@@ -73,10 +88,7 @@ const StudySessions = () => {
             {isActive ? <Pause size={18} /> : <Play size={18} />}
             {isActive ? 'Pause' : 'Start Focus'}
           </button>
-          <button 
-            onClick={resetTimer}
-            className="p-2 text-slate-500 hover:text-white transition-colors"
-          >
+          <button onClick={resetTimer} className="p-2 text-slate-500 hover:text-white transition-colors">
             <RotateCcw size={20} />
           </button>
         </div>
