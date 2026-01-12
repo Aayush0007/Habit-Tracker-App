@@ -1,14 +1,16 @@
 import React, { useState } from "react";
 import { useDashboardStats } from "../../hooks/useDashboardStats";
 import { 
-  Target, BarChart3, ChevronRight, Swords, Activity, Zap
+  Target, BarChart3, ChevronRight, Swords, Activity, Zap, Rocket, X 
 } from "lucide-react";
 import CountdownHeader from "../../components/Dashboard/CountdownHeader";
 import IdentityHeader from "../../components/IdentityHeader";
 import { CONFIG } from "../../config";
 
-const Dashboard = () => {
+const Dashboard = ({ user, canInstall, onInstall }) => {
   const [activeExam, setActiveExam] = useState("AFCAT"); 
+  const [showInstallBanner, setShowInstallBanner] = useState(true);
+
   const { 
     totalHours, 
     status, 
@@ -19,7 +21,6 @@ const Dashboard = () => {
     loading 
   } = useDashboardStats(activeExam);
 
-  // Dynamic feedback logic for visual indexing
   const getReadinessLevel = (val) => {
     if (val >= 90) return { label: "Combat Ready", color: "text-emerald-400", glow: "shadow-emerald-500/20" };
     if (val >= 70) return { label: "Deployment Ready", color: "text-blue-400", glow: "shadow-blue-500/20" };
@@ -43,15 +44,38 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 pb-32">
+      {/* PWA INSTALL TRIGGER */}
+      {canInstall && showInstallBanner && (
+        <div className="mx-6 mt-6 p-4 bg-blue-600 rounded-3xl flex items-center justify-between shadow-xl shadow-blue-900/40 animate-in fade-in slide-in-from-top-4 duration-700">
+          <button 
+            onClick={onInstall}
+            className="flex items-center gap-4 flex-1 text-left"
+          >
+            <div className="p-2.5 bg-white/20 rounded-2xl">
+              <Rocket size={20} className="text-white" />
+            </div>
+            <div>
+              <p className="text-[8px] font-black uppercase tracking-widest text-blue-100 opacity-80">System Enhancement</p>
+              <p className="text-sm font-black text-white italic tracking-tight">INSTALL WARRIOR APP</p>
+            </div>
+          </button>
+          <button 
+            onClick={() => setShowInstallBanner(false)}
+            className="p-2 text-white/50 hover:text-white transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       <IdentityHeader totalHours={totalHours} />
 
       <div className="p-6 space-y-8 max-w-2xl mx-auto">
-        
         {/* OPERATIONAL TIMELINE */}
         <section className="space-y-4">
-          <div className="flex items-center gap-2 px-2">
+          <div className="flex items-center gap-2 px-2 text-slate-500">
             <Activity size={14} className="text-blue-500" />
-            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Operational Timeline</h3>
+            <h3 className="text-[10px] font-black uppercase tracking-[0.3em]">Operational Timeline</h3>
           </div>
           <CountdownHeader />
         </section>
@@ -63,7 +87,7 @@ const Dashboard = () => {
               <Target size={20} />
             </div>
             <div className="flex-1">
-              <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-1">Active Theater of Ops</p>
+              <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-1 ml-1">Active Objective</p>
               <select
                 value={activeExam}
                 onChange={(e) => setActiveExam(e.target.value)}

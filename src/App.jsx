@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from "react";
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
+import { Toaster } from "react-hot-toast";
 
 // Tactical Components
 import Navbar from "./components/Navbar/Navbar";
@@ -19,11 +15,14 @@ import MockTests from "./pages/MockTests/MockTests";
 import WeeklyReview from "./pages/WeeklyReview/WeeklyReview";
 import Settings from "./pages/Settings/Settings";
 import SyllabusTracker from "./pages/Syllabus/SyllabusTracker";
-import NotificationProvider from "./components/Notification/Notification";
+import { usePWAInstall } from "./hooks/usePWAInstall";
 
 function App() {
   const [session, setSession] = useState(null);
   const [initializing, setInitializing] = useState(true);
+
+  // Initialize PWA Logic
+  const { deferredPrompt, installApp } = usePWAInstall();
 
   useEffect(() => {
     // Check initial session
@@ -33,9 +32,7 @@ function App() {
     });
 
     // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
 
@@ -56,46 +53,34 @@ function App() {
 
   return (
     <>
-      <NotificationProvider />
+      <Toaster />
       <Router>
         <div className="min-h-screen bg-slate-950 text-white pb-24">
           <Routes>
-            <Route path="/" element={<Dashboard user={session.user} />} />
-            <Route
-              path="/sessions"
-              element={<StudySessions user={session.user} />}
+            {/* Dashboard gets the Install Logic */}
+            <Route 
+              path="/" 
+              element={
+                <Dashboard 
+                  user={session.user} 
+                  canInstall={!!deferredPrompt} 
+                  onInstall={installApp} 
+                />
+              } 
             />
-            <Route
-              path="/tracker"
-              element={<DailyTracker user={session.user} />}
-            />
+            
+            <Route path="/sessions" element={<StudySessions user={session.user} />} />
+            <Route path="/tracker" element={<DailyTracker user={session.user} />} />
             <Route path="/mocks" element={<MockTests user={session.user} />} />
-            <Route
-              path="/analytics"
-              element={<Analytics user={session.user} />}
-            />
-            <Route
-              path="/calendar"
-              element={<CalendarView user={session.user} />}
-            />
-            <Route
-              path="/review"
-              element={<WeeklyReview user={session.user} />}
-            />
-            <Route
-              path="/settings"
-              element={<Settings user={session.user} />}
-            />
-            <Route
-              path="/syllabus"
-              element={<SyllabusTracker user={session.user} />}
-            />
+            <Route path="/analytics" element={<Analytics user={session.user} />} />
+            <Route path="/calendar" element={<CalendarView user={session.user} />} />
+            <Route path="/review" element={<WeeklyReview user={session.user} />} />
+            <Route path="/settings" element={<Settings user={session.user} />} />
+            <Route path="/syllabus" element={<SyllabusTracker user={session.user} />} />
 
-            {/* Catch-all redirect */}
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
 
-          {/* Navigation persistent across routes */}
           <Navbar />
         </div>
       </Router>
