@@ -20,8 +20,21 @@ export const EXAM_DATES = [
   { name: 'SEBI Gr A', date: '2027-01-15', color: 'text-indigo-400' },
   { name: 'RRB Clerk Mains', date: '2027-01-30', color: 'text-rose-700' },
 ];
-
 export const getDaysUntil = (dateString) => {
-  const diff = new Date(dateString) - new Date();
+  const target = new Date(dateString);
+  const now = new Date();
+  // Reset time to midnight for accurate day calculation
+  target.setHours(0, 0, 0, 0);
+  now.setHours(0, 0, 0, 0);
+  
+  const diff = target - now;
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+};
+
+/**
+ * Ensures consistent date strings across the app to prevent 
+ * timezone shifting in Supabase queries.
+ */
+export const getSystemDate = (date = new Date()) => {
+  return date.toISOString().split('T')[0];
 };

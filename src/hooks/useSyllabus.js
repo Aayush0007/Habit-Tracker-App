@@ -1,28 +1,74 @@
-import { useState, useEffect } from 'react';
-import { initDB } from '../db/indexedDB/dbConfig';
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../supabaseClient';
+import { showToast } from '../services/notificationService';
 
 export const useSyllabus = () => {
   const [completedTopics, setCompletedTopics] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadSyllabus = async () => {
-      const db = await initDB();
-      const saved = await db.getAll('syllabus_progress');
-      setCompletedTopics(saved.map(item => item.topicName));
-    };
-    loadSyllabus();
+  const loadSyllabus = useCallback(async () => {
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('syllabus_progress')
+      .select('topic_name')
+      .eq('user_id', user.id);
+
+    if (error) {
+      showToast("Sync Error: " + error.message, "error");
+    } else {
+      setCompletedTopics(data.map(item => item.topic_name));
+    }
+    setLoading(false);
   }, []);
 
+  useEffect(() => {
+    loadSyllabus();
+  }, [loadSyllabus]);
+
   const toggleTopic = async (topicName) => {
-    const db = await initDB();
-    if (completedTopics.includes(topicName)) {
-      await db.delete('syllabus_progress', topicName);
-      setCompletedTopics(prev => prev.filter(t => t !== topicName));
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const isCurrentlyCompleted = completedTopics.includes(topicName);
+    const compositeId = `${user.id}-${topicName}`;
+
+    // Optimistic Update for "Warrior" speed
+    setCompletedTopics(prev => 
+      isCurrentlyCompleted ? prev.filter(t => t !== topicName) : [...prev, topicName]
+    );
+
+    if (isCurrentlyCompleted) {
+      // Remove from cloud
+      const { error } = await supabase
+        .from('syllabus_progress')
+        .delete()
+        .eq('id', compositeId);
+      
+      if (error) {
+        showToast("Cloud sync failed", "error");
+        loadSyllabus(); // Revert
+      }
     } else {
-      await db.add('syllabus_progress', { topicName, dateCompleted: new Date().toISOString() });
-      setCompletedTopics(prev => [...prev, topicName]);
+      // Add to cloud
+      const { error } = await supabase
+        .from('syllabus_progress')
+        .insert({
+          id: compositeId,
+          user_id: user.id,
+          topic_name: topicName
+        });
+
+      if (error) {
+        showToast("Cloud sync failed", "error");
+        loadSyllabus(); // Revert
+      } else {
+        showToast(`Mastered: ${topicName.split(':')[0]}`);
+      }
     }
   };
 
-  return { completedTopics, toggleTopic };
+  return { completedTopics, toggleTopic, loading };
 };

@@ -1,85 +1,98 @@
-import React, { useState, useEffect } from 'react';
-import { initDB } from '../../db/indexedDB/dbConfig';
-import MockForm from './MockForm';
-import { Trophy, TrendingUp, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { supabase } from "../../supabaseClient";
+import MockForm from "./MockForm"; // Ensure this points to the pure form component
+import { Trophy, TrendingUp, Swords, Target, Plus, X, BarChart2, Loader2 } from "lucide-react";
+import { showToast } from "../../services/notificationService";
 
 const MockTests = () => {
   const [mocks, setMocks] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const fetchMocks = async () => {
-    const db = await initDB();
-    const allMocks = await db.getAll('mock_exams');
-    setMocks(allMocks.sort((a, b) => new Date(b.date) - new Date(a.date)));
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("mock_exams")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("date", { ascending: false });
+
+    if (error) showToast(error.message, "error");
+    else setMocks(data || []);
+    setLoading(false);
   };
 
-  useEffect(() => {
-    fetchMocks();
-  }, []);
+  useEffect(() => { fetchMocks(); }, []);
 
   const handleSaveMock = async (mockData) => {
-    const db = await initDB();
-    await db.add('mock_exams', {
-      ...mockData,
-      id: crypto.randomUUID(),
-      date: new Date().toISOString().split('T')[0]
-    });
-    setShowForm(false);
-    fetchMocks();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from("mock_exams")
+      .insert([{ ...mockData, user_id: user.id }]);
+
+    if (error) {
+      showToast(error.message, "error");
+    } else {
+      showToast("Strategic Data Captured");
+      setShowForm(false);
+      fetchMocks();
+    }
   };
 
   const deleteMock = async (id) => {
-    const db = await initDB();
-    await db.delete('mock_exams', id);
-    fetchMocks();
+    const { error } = await supabase.from("mock_exams").delete().eq("id", id);
+    if (error) showToast(error.message, "error");
+    else {
+      setMocks(prev => prev.filter(m => m.id !== id));
+      showToast("Record Purged");
+    }
   };
 
   return (
-    <div className="p-6 space-y-6 pb-24">
+    <div className="p-6 space-y-6 pb-24 max-w-2xl mx-auto">
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Mock Analysis</h1>
-          <p className="text-slate-400 text-sm">Quantify your progress</p>
+          <h1 className="text-4xl font-black italic text-white uppercase tracking-tighter">Ops Log</h1>
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.4em]">Combat Performance History</p>
         </div>
         <button 
           onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 hover:bg-blue-500 p-2 rounded-lg transition-colors"
+          className={`p-4 rounded-2xl transition-all shadow-xl ${showForm ? 'bg-slate-800 text-rose-500' : 'bg-blue-600 text-white shadow-blue-900/40'}`}
         >
-          {showForm ? 'Close' : 'Add Mock'}
+          {showForm ? <X size={20} /> : <Plus size={20} />}
         </button>
       </header>
 
       {showForm && <MockForm onSave={handleSaveMock} />}
 
       <div className="space-y-4">
-        {mocks.length === 0 ? (
-          <div className="card text-center py-10 opacity-50 border-dashed">
-            <AlertCircle className="mx-auto mb-2" />
-            <p>No mocks logged yet. Time to test yourself!</p>
+        {loading ? (
+          <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-blue-500" /></div>
+        ) : mocks.length === 0 ? (
+          <div className="card bg-slate-900 border-2 border-dashed border-slate-800 p-16 text-center rounded-[2rem] opacity-40">
+            <Swords size={48} className="mx-auto mb-4 text-slate-700" />
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">No Tactical Data Found</p>
           </div>
         ) : (
           mocks.map(mock => (
-            <div key={mock.id} className="card flex justify-between items-center border-l-4 border-blue-500">
-              <div>
-                <h3 className="font-bold text-slate-100">{mock.examName}</h3>
-                <div className="flex gap-2 text-[10px] uppercase font-black tracking-widest text-slate-500 mt-1">
-                  <span>{mock.category}</span>
-                  <span>•</span>
-                  <span>{mock.difficulty}</span>
+            <div key={mock.id} className="card bg-slate-900 border-2 border-slate-800 p-5 rounded-[1.5rem] flex justify-between items-center group hover:border-blue-500/30 transition-all shadow-lg">
+              <div className="flex items-center gap-5">
+                <div className="w-14 h-14 bg-slate-950 border border-slate-800 rounded-2xl flex flex-col items-center justify-center">
+                  <span className="text-blue-400 font-black text-lg italic">{mock.score}</span>
+                  <span className="text-[7px] text-slate-600 font-black uppercase">Score</span>
                 </div>
-              </div>
-              <div className="text-right flex items-center gap-4">
                 <div>
-                  <span className="text-2xl font-black text-blue-400">{mock.score}</span>
-                  <span className="text-slate-600 text-xs ml-1">pts</span>
+                  <h3 className="font-black text-white text-sm italic uppercase tracking-tight">{mock.exam_name}</h3>
+                  <div className="flex gap-2 mt-1.5">
+                    <span className="text-[7px] font-black text-slate-400 uppercase bg-slate-800 px-2 py-0.5 rounded-md">{mock.category}</span>
+                    <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded-md ${mock.difficulty === 'Hard' ? 'text-rose-500 bg-rose-500/10' : 'text-slate-500 bg-slate-800'}`}>{mock.difficulty}</span>
+                  </div>
                 </div>
-                <button 
-                  onClick={() => deleteMock(mock.id)}
-                  className="text-slate-700 hover:text-rose-500 transition-colors"
-                >
-                  ✕
-                </button>
               </div>
+              <button onClick={() => deleteMock(mock.id)} className="p-2 text-slate-800 hover:text-rose-500 transition-colors"><X size={18} /></button>
             </div>
           ))
         )}

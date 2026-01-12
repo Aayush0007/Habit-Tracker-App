@@ -1,1 +1,0 @@
-export const getTotalHours = (logs) => logs.reduce((sum, log) => sum + log.studyMinutes / 60, 0);

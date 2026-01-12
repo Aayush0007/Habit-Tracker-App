@@ -1,77 +1,185 @@
 import React, { useState, useEffect } from 'react';
-import { ClipboardCheck, TrendingUp } from 'lucide-react';
-import { initDB } from '../../db/indexedDB/dbConfig';
+import { 
+  ClipboardCheck, TrendingUp, ShieldCheck, Save, 
+  Loader2, Zap, History, ChevronDown, Calendar, ArrowRight 
+} from 'lucide-react';
+import { supabase } from '../../supabaseClient';
+import { showToast } from '../../services/notificationService';
 
 const WeeklyReview = () => {
-  // 1. PLACE LOGIC HERE (Inside the component, before return)
   const [weeklyAvg, setWeeklyAvg] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [reflection, setReflection] = useState({ workedWell: '', improvements: '' });
 
   useEffect(() => {
-    const calculateWeeklyAvg = async () => {
-      const db = await initDB();
-      const allLogs = await db.getAll('daily_logs');
-      
-      // Filter for only the last 7 days
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      
-      const lastSevenDays = allLogs.filter(log => new Date(log.date) >= sevenDaysAgo);
-      
-      const totalMinutes = lastSevenDays.reduce((acc, curr) => acc + (curr.studyMinutes || 0), 0);
-      
-      // Convert to average hours per day
-      const avgHours = (totalMinutes / 7 / 60).toFixed(1);
-      setWeeklyAvg(avgHours);
-    };
-    calculateWeeklyAvg();
+    fetchWeeklyData();
   }, []);
 
+  const fetchWeeklyData = async () => {
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // 1. Calculate stats for the current active week
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const dateStr = sevenDaysAgo.toISOString().split('T')[0];
+
+    const { data: sessions } = await supabase
+      .from('study_sessions')
+      .select('status')
+      .eq('user_id', user.id)
+      .eq('status', 'completed')
+      .gte('date', dateStr);
+
+    const totalHours = (sessions?.length || 0) * 2;
+    setWeeklyAvg((totalHours / 7).toFixed(1));
+
+    // 2. Fetch History of past reflections
+    const { data: reviews, error } = await supabase
+      .from('weekly_reviews')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('week_start_date', { ascending: false });
+
+    if (!error) setHistory(reviews || []);
+    setLoading(false);
+  };
+
+  const handleLockReview = async () => {
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    const now = new Date();
+    const oneJan = new Date(now.getFullYear(), 0, 1);
+    const numberOfDays = Math.floor((now - oneJan) / (24 * 60 * 60 * 1000));
+    const weekNumber = Math.ceil((now.getDay() + 1 + numberOfDays) / 7);
+    const weekId = `${user.id}-${now.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
+
+    const { error } = await supabase
+      .from('weekly_reviews')
+      .upsert({
+        id: weekId,
+        user_id: user.id,
+        week_start_date: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        worked_well: reflection.workedWell,
+        improvements: reflection.improvements,
+        avg_hours: parseFloat(weeklyAvg),
+        discipline_score: Math.round((parseFloat(weeklyAvg) / 12) * 100)
+      });
+
+    if (error) {
+      showToast("Cloud Sync Error", "error");
+    } else {
+      showToast("Strategy Logged Successfully");
+      fetchWeeklyData(); // Refresh history list
+    }
+    setSaving(false);
+  };
+
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950">
+      <Loader2 className="text-emerald-500 animate-spin mb-4" size={32} />
+      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Compiling Intelligence...</p>
+    </div>
+  );
+
   return (
-    <div className="p-6 space-y-6 pb-24">
+    <div className="p-6 space-y-10 pb-32 max-w-2xl mx-auto">
       <header>
-        <h1 className="text-2xl font-bold text-white">Weekly Reflection</h1>
-        <p className="text-slate-400 text-sm">Convert effort into strategy</p>
+        <div className="flex items-center gap-3 mb-2">
+          <ShieldCheck className="text-emerald-500" size={24} />
+          <h1 className="text-4xl font-black italic tracking-tighter text-white uppercase leading-none">After Action Report</h1>
+        </div>
+        <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.4em]">Strategy • Reflection • Archive</p>
       </header>
 
-      {/* 2. UI UPDATE: Weekly Average Card */}
-      <div className="card bg-emerald-500/10 border-emerald-500/20 p-6 flex items-center justify-between shadow-lg shadow-emerald-900/10">
-        <div>
-          <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Weekly Average</p>
-          <p className="text-4xl font-black text-white">{weeklyAvg} <span className="text-sm font-normal text-slate-400 italic">hrs/day</span></p>
+      {/* Stats Summary */}
+      <div className="card bg-slate-900 border-2 border-emerald-500/20 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Weekly Performance Mean</p>
+        <div className="flex items-baseline gap-2">
+          <span className="text-6xl font-black text-white italic">{weeklyAvg}</span>
+          <span className="text-slate-500 font-bold text-sm uppercase italic">Hours / Day</span>
         </div>
-        <div className="bg-emerald-500/20 p-3 rounded-full">
-          <TrendingUp className="text-emerald-400" size={24} />
-        </div>
+        <TrendingUp className="absolute -right-4 -bottom-4 text-emerald-500 opacity-10 rotate-12" size={140} />
       </div>
 
-      <div className="card border-slate-800 bg-slate-900/50 p-6 space-y-4">
-        <div className="flex items-center gap-3 text-emerald-400 mb-2">
+      {/* Input Section */}
+      <div className="card bg-slate-900 border-2 border-slate-800 p-7 rounded-[2rem] space-y-6 shadow-xl">
+        <div className="flex items-center gap-3 text-blue-400 border-b border-slate-800 pb-4">
           <ClipboardCheck size={20} />
-          <h2 className="font-bold">Sunday Ritual</h2>
+          <h2 className="font-black uppercase italic tracking-widest text-sm">Sunday Ritual</h2>
         </div>
         
-        <div className="space-y-4">
-          <div>
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">What worked well this week?</label>
-            <textarea 
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 mt-2 text-sm text-white outline-none focus:border-emerald-500 transition-all" 
-              rows="3" 
-              placeholder="e.g. Early morning quants sessions were productive..."
-            ></textarea>
-          </div>
-          <div>
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">One improvement for next week?</label>
-            <textarea 
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 mt-2 text-sm text-white outline-none focus:border-blue-500 transition-all" 
-              rows="3" 
-              placeholder="e.g. Need to improve mock analysis speed..."
-            ></textarea>
-          </div>
-          <button className="btn-primary w-full py-4 font-bold shadow-lg shadow-emerald-900/20">
-            Lock Weekly Review
+        <div className="space-y-6">
+          <textarea 
+            className="w-full bg-slate-950 border-2 border-slate-800 rounded-2xl p-4 text-sm text-slate-200 outline-none focus:border-emerald-500 transition-all placeholder:text-slate-700" 
+            rows="3" placeholder="Force Multipliers (What worked?)"
+            value={reflection.workedWell}
+            onChange={(e) => setReflection({...reflection, workedWell: e.target.value})}
+          />
+          <textarea 
+            className="w-full bg-slate-950 border-2 border-slate-800 rounded-2xl p-4 text-sm text-slate-200 outline-none focus:border-blue-500 transition-all placeholder:text-slate-700" 
+            rows="3" placeholder="Critical Deficiencies (Improvements?)"
+            value={reflection.improvements}
+            onChange={(e) => setReflection({...reflection, improvements: e.target.value})}
+          />
+          <button 
+            onClick={handleLockReview}
+            disabled={saving}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 py-5 rounded-2xl font-black uppercase tracking-[0.3em] transition-all shadow-xl flex items-center justify-center gap-4 text-xs disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="animate-spin" /> : <Save size={18} />}
+            {saving ? 'Syncing...' : 'Lock Strategy'}
           </button>
         </div>
       </div>
+
+      {/* --- HISTORY SECTION --- */}
+      <section className="space-y-6">
+        <div className="flex items-center gap-3 ml-2">
+          <History size={18} className="text-slate-500" />
+          <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em]">Reflective Archive</h3>
+        </div>
+
+        <div className="space-y-4">
+          {history.length === 0 ? (
+            <div className="p-10 border-2 border-dashed border-slate-800 rounded-[2rem] text-center opacity-40">
+              <p className="text-[10px] font-bold uppercase text-slate-500">No Archive Data Secured</p>
+            </div>
+          ) : (
+            history.map((rev) => (
+              <div key={rev.id} className="card bg-slate-900/40 border border-slate-800 p-6 rounded-[2rem] space-y-4 hover:border-slate-700 transition-all">
+                <div className="flex justify-between items-center border-b border-slate-800/50 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Calendar size={14} className="text-blue-500" />
+                    <span className="text-[10px] font-black text-white uppercase tracking-tighter">
+                      Week Starting: {new Date(rev.week_start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-1 bg-slate-800 rounded-lg">
+                    <span className="text-[10px] font-black text-emerald-400">{rev.avg_hours}h</span>
+                    <span className="text-[8px] font-bold text-slate-500 uppercase">Avg</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Victory</p>
+                    <p className="text-xs text-slate-300 font-medium leading-relaxed">{rev.worked_well || 'No victory logged'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[8px] font-black text-rose-500 uppercase tracking-widest">Correction</p>
+                    <p className="text-xs text-slate-300 font-medium leading-relaxed">{rev.improvements || 'No correction logged'}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
     </div>
   );
 };

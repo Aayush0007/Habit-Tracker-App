@@ -2,24 +2,59 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg-dark: #0f172a;
-  --card-dark: #1e293b;
-  --accent-green: #10b981;
-  --accent-yellow: #f59e0b;
-  --accent-red: #ef4444;
+@layer base {
+  :root {
+    --bg-main: #020617;      /* Tailwind Slate-950 */
+    --card-main: #0f172a;    /* Tailwind Slate-900 */
+    --border-main: #1e293b;  /* Tailwind Slate-800 */
+  }
+
+  body {
+    background-color: var(--bg-main);
+    @apply text-slate-200 antialiased selection:bg-blue-500/30;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
 }
 
-body {
-  background-color: var(--bg-dark);
-  color: white;
-  font-family: 'Inter', sans-serif;
+@layer components {
+  /* TACTICAL CARD: Industrial, heavy borders */
+  .card {
+    @apply bg-slate-900/50 border-2 border-slate-800 rounded-[2rem] p-6 
+           shadow-2xl backdrop-blur-sm transition-all duration-300;
+  }
+
+  /* WARRIOR BUTTON: High-contrast interaction */
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-500 text-white font-black uppercase 
+           tracking-[0.2em] text-[10px] py-4 px-6 rounded-2xl 
+           transition-all active:scale-95 shadow-lg shadow-blue-900/20
+           flex items-center justify-center gap-2;
+  }
+
+  /* INPUTS: Stealth look */
+  input[type="text"], input[type="email"], input[type="password"], textarea {
+    @apply bg-slate-950 border-2 border-slate-800 rounded-2xl p-4 
+           text-white placeholder:text-slate-700 outline-none 
+           focus:border-blue-500/50 transition-all;
+  }
 }
 
-.card {
-  @apply bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-lg;
-}
+/* CUSTOM UTILITIES: For the "Tactical" feel */
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 
-.btn-primary {
-  @apply bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg transition-all;
+  .text-glow-blue {
+    text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+  }
+
+  .bg-grid-pattern {
+    background-image: radial-gradient(circle, #1e293b 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
 }

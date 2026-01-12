@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { initDB } from '../db/indexedDB/dbConfig';
-import { calculateTotalStudyHours, calculateStudyStatus } from '../features/studySessions/sessionLogic';
+import { supabase } from '../supabaseClient';
+import { calculateStudyStatus } from '../features/studySessions/sessionLogic';
 import { SYLLABUS } from '../data/syllabus';
 
-export const useDashboardStats = (activeExam = 'SBI PO Pre', date = new Date().toISOString().split('T')[0]) => {
+export const useDashboardStats = (activeExam = 'AFCAT', date = new Date().toISOString().split('T')[0]) => {
   const [stats, setStats] = useState({
     totalHours: 0,
-    status: { label: 'Missed', color: 'text-rose-400' },
+    status: { label: 'Inactive', color: 'text-slate-500' },
     workoutDone: false,
     revisionDone: false,
     readiness: 0,
@@ -17,68 +17,50 @@ export const useDashboardStats = (activeExam = 'SBI PO Pre', date = new Date().t
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const db = await initDB();
-        
-        // 1. Study Hours (Daily)
-        const allSessions = await db.getAll('study_sessions');
-        const todaySessions = allSessions.filter(s => s.date === date);
-        const hours = calculateTotalStudyHours(todaySessions);
-        
-        // 2. Habits (Daily)
-        const todayLog = await db.get('daily_logs', date);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-        // 3. Exam-Specific Syllabus Readiness
-        const completedSyllabus = await db.getAll('syllabus_progress');
-        
-        // Define which categories apply to which exam type
-        let relevantCategories = ["Banking Core (Quants/Reason/Eng)"];
-        if (activeExam.includes('SSC') || activeExam.includes('AFCAT') || activeExam.includes('NTPC')) {
-          relevantCategories.push("SSC & AFCAT (Advance/GS)");
-        }
-        if (activeExam.includes('RBI') || activeExam.includes('SEBI') || activeExam.includes('NABARD')) {
-          relevantCategories.push("Regulatory (RBI/SEBI/NABARD)");
-        }
-        if (activeExam.includes('Comp')) {
-          relevantCategories.push("Computer & Technical");
-        }
+        // Simultaneous Fetch for "Warrior" speed
+        const [sessionsRes, logsRes, progressRes, mocksRes] = await Promise.all([
+          supabase.from('study_sessions').select('status').eq('user_id', user.id).eq('date', date).eq('status', 'completed'),
+          supabase.from('daily_logs').select('workout_done, revision_done').eq('id', `${user.id}-${date}`).maybeSingle(),
+          supabase.from('syllabus_progress').select('topic_name').eq('user_id', user.id),
+          supabase.from('mock_exams').select('score').eq('user_id', user.id).eq('category', activeExam)
+        ]);
 
+        const hours = (sessionsRes.data?.length || 0) * 2;
+        const todayLog = logsRes.data || { workout_done: false, revision_done: false };
+        const completedTopics = progressRes.data?.map(p => p.topic_name) || [];
+
+        // Dynamic Syllabus Calculation
+        const examKeywords = activeExam.split(' ')[0]; // Gets "SBI", "AFCAT", etc.
         const relevantTopics = Object.entries(SYLLABUS)
-          .filter(([category]) => relevantCategories.includes(category))
+          .filter(([category]) => category.includes(examKeywords) || category.includes("Banking Core"))
           .flatMap(([_, topics]) => topics);
 
-        const completedCount = completedSyllabus.filter(item => 
-          relevantTopics.includes(item.topicName)
-        ).length;
-
-        const syllabusPercent = relevantTopics.length > 0 ? (completedCount / relevantTopics.length) * 100 : 0;
-
-        // 4. Exam-Specific Mock Average
-        const allMocks = await db.getAll('mock_exams');
-        const examSpecificMocks = allMocks.filter(m => m.category === activeExam);
-        const avgMockScore = examSpecificMocks.length > 0 
-          ? examSpecificMocks.reduce((sum, m) => sum + Number(m.score), 0) / examSpecificMocks.length 
+        const syllabusPercent = relevantTopics.length > 0 
+          ? (completedTopics.filter(t => relevantTopics.includes(t)).length / relevantTopics.length) * 100 
           : 0;
 
-        // Weighted Readiness: 60% Syllabus + 40% Mock Performance
-        const readinessScore = (syllabusPercent * 0.6) + (avgMockScore * 0.4);
+        const avgMock = mocksRes.data?.length > 0 
+          ? mocksRes.data.reduce((s, m) => s + m.score, 0) / mocksRes.data.length 
+          : 0;
 
         setStats({
           totalHours: hours,
-          status: calculateStudyStatus(hours * 60),
-          workoutDone: (todayLog?.workoutMinutes || 0) >= 30,
-          revisionDone: todayLog?.revisionDone || false,
-          readiness: Math.round(readinessScore),
-          mockAvg: Math.round(avgMockScore),
+          status: calculateStudyStatus(hours),
+          workoutDone: todayLog.workout_done,
+          revisionDone: todayLog.revision_done,
+          readiness: Math.round((syllabusPercent * 0.7) + (avgMock * 0.3)), // Syllabus is weighted higher
+          mockAvg: Math.round(avgMock),
           loading: false
         });
-      } catch (error) {
-        console.error("Dashboard Stats Error:", error);
+      } catch (e) {
         setStats(prev => ({ ...prev, loading: false }));
       }
     };
-
     fetchStats();
-  }, [date, activeExam]); // Re-calculate when the exam target changes
+  }, [date, activeExam]);
 
   return stats;
 };

@@ -3,12 +3,12 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 
-// Register Service Worker for Offline Mode
-if ('serviceWorker' in navigator) {
+// Optimized Service Worker Registration
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(err => {
-      console.log('Service Worker registration failed: ', err);
-    });
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('Tactical Offline Mode: Active'))
+      .catch(err => console.error('Offline Sync Failed:', err));
   });
 }
 

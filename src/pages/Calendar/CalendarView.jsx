@@ -1,108 +1,152 @@
 import React, { useState, useEffect } from 'react';
-import { initDB } from '../../db/indexedDB/dbConfig';
+import { supabase } from '../../supabaseClient';
 import { getDaysInMonth, getFirstDayOfMonth, getStatusColor } from '../../utils/calendarUtils';
+import { calculateStudyStatus } from '../../features/studySessions/sessionLogic';
+import { Calendar as CalendarIcon, Zap, ShieldCheck, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const CalendarView = () => {
   const [logs, setLogs] = useState({});
-  
-  // Hardcoded to January 2026 for your specific exam focus
-  const displayMonth = 0; // January is 0 in JS
-  const displayYear = 2026;
-  
-  const days = getDaysInMonth(displayMonth, displayYear);
-  const firstDay = getFirstDayOfMonth(displayMonth, displayYear);
+  const [loading, setLoading] = useState(true);
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1)); // Default to Jan 2026
+
+  const month = currentDate.getMonth();
+  const year = currentDate.getFullYear();
+  const days = getDaysInMonth(month, year);
+  const firstDay = getFirstDayOfMonth(month, year);
+  const todayDateStr = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
     const fetchMonthData = async () => {
-      try {
-        const db = await initDB();
-        const allLogs = await db.getAll('daily_logs');
-        const logMap = {};
-        allLogs.forEach(log => {
-          logMap[log.date] = log.dayStatus;
-        });
-        setLogs(logMap);
-      } catch (error) {
-        console.error("Error fetching calendar data:", error);
-      }
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Calculate date range for the current view
+      const start = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const end = `${year}-${String(month + 1).padStart(2, '0')}-${days}`;
+
+      const { data: sessions } = await supabase
+        .from('study_sessions')
+        .select('date, status')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .gte('date', start)
+        .lte('date', end);
+
+      const dayMap = {};
+      sessions?.forEach(session => {
+        dayMap[session.date] = (dayMap[session.date] || 0) + 2; 
+      });
+
+      const statusMap = {};
+      Object.entries(dayMap).forEach(([date, totalHours]) => {
+        // Updated to use the 'code' property from your logic
+        statusMap[date] = calculateStudyStatus(totalHours).label.split(' ')[0].toLowerCase();
+      });
+
+      setLogs(statusMap);
+      setLoading(false);
     };
     fetchMonthData();
-  }, []);
+  }, [currentDate, month, year, days]);
 
-  // Create the grid: placeholders for empty days + the actual days of the month
+  const changeMonth = (offset) => {
+    setCurrentDate(new Date(year, month + offset, 1));
+  };
+
   const calendarGrid = Array(firstDay).fill(null).concat([...Array(days).keys()]);
 
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950">
+      <Loader2 className="text-blue-500 animate-spin mb-4" size={32} />
+      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Retrieving Timeline</p>
+    </div>
+  );
+
   return (
-    <div className="p-6 space-y-6 pb-24">
-      <header>
-        <h1 className="text-2xl font-bold text-white tracking-tight">Consistency Map</h1>
-        <p className="text-emerald-400 text-sm font-bold uppercase tracking-widest">January 2026</p>
+    <div className="p-6 space-y-8 pb-24 max-w-lg mx-auto">
+      <header className="flex justify-between items-center">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <CalendarIcon className="text-blue-500" size={18} />
+            <h1 className="text-3xl font-black italic text-white tracking-tighter uppercase">Consistency Map</h1>
+          </div>
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.4em]">
+            Deployment: {currentDate.toLocaleString('default', { month: 'long' })} {year}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => changeMonth(-1)} className="p-2 bg-slate-900 border border-slate-800 rounded-xl hover:text-blue-400 transition-colors">
+            <ChevronLeft size={20} />
+          </button>
+          <button onClick={() => changeMonth(1)} className="p-2 bg-slate-900 border border-slate-800 rounded-xl hover:text-blue-400 transition-colors">
+            <ChevronRight size={20} />
+          </button>
+        </div>
       </header>
 
-      <div className="card p-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl">
-        {/* Days Header - Fixed unique key error */}
-        <div className="grid grid-cols-7 mb-4">
-          {['S','M','T','W','T','F','S'].map((d, index) => (
-            <div 
-              key={`header-${d}-${index}`} 
-              className="text-center text-[10px] font-black text-slate-600 uppercase"
-            >
-              {d}
-            </div>
+      <div className="card p-6 bg-slate-900/50 border-2 border-slate-800 rounded-[2rem] shadow-2xl backdrop-blur-xl">
+        <div className="grid grid-cols-7 mb-6">
+          {['S','M','T','W','T','F','S'].map((d, i) => (
+            <div key={i} className="text-center text-[10px] font-black text-slate-700 uppercase">{d}</div>
           ))}
         </div>
 
-        {/* Calendar Grid - Fixed unique key error */}
         <div className="grid grid-cols-7 gap-3">
           {calendarGrid.map((day, index) => {
-            const key = `grid-cell-${index}`;
-            
-            if (day === null) {
-              return <div key={key} className="w-8 h-8" />;
-            }
+            if (day === null) return <div key={`empty-${index}`} />;
             
             const dayNum = day + 1;
-            const dateStr = `2026-01-${String(dayNum).padStart(2, '0')}`;
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
             const status = logs[dateStr] || 'none';
+            const isToday = dateStr === todayDateStr;
 
             return (
-              <div key={key} className="flex flex-col items-center justify-center">
+              <div key={dateStr} className="flex justify-center relative">
                 <div 
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center text-[11px] font-bold transition-all duration-300 border ${
-                    status === 'none' 
-                      ? 'bg-slate-800 border-slate-700 text-slate-500' 
-                      : `${getStatusColor(status)} border-transparent text-white shadow-lg`
-                  }`}
+                  className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center text-[11px] font-black transition-all duration-500 border-2
+                  ${getStatusColor(status)} 
+                  ${isToday ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-950 scale-110 z-10' : ''}`}
                 >
                   {dayNum}
+                  {isToday && (
+                    <span className="absolute -bottom-1.5 text-[6px] font-black text-blue-400 tracking-tighter animate-pulse">LIVE</span>
+                  )}
                 </div>
+                {status !== 'none' && (
+                  <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white rounded-full border-2 border-slate-950 z-20" />
+                )}
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Legend Section */}
-      <div className="space-y-4">
-        <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] ml-1">Status Legend</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <LegendItem color="bg-purple-500" label="Best Day (10h+)" />
-          <LegendItem color="bg-emerald-500" label="Target Met (8h+)" />
-          <LegendItem color="bg-amber-500" label="Partial Day (6h+)" />
-          <LegendItem color="bg-rose-500" label="Missed Day" />
-          <LegendItem color="bg-slate-500" label="Recovery Day" />
-          <LegendItem color="bg-slate-800" label="No Entry" />
+      <section className="space-y-4">
+        <div className="flex justify-between items-center px-1">
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={14} className="text-slate-500" />
+            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Deployment Codes</h3>
+          </div>
         </div>
-      </div>
+        <div className="grid grid-cols-2 gap-3">
+          <LegendItem color="bg-purple-600" label="Elite (10h+)" icon={<Zap size={10} />} />
+          <LegendItem color="bg-emerald-600" label="Target (8h+)" />
+          <LegendItem color="bg-amber-600" label="Partial (4h+)" />
+          <LegendItem color="bg-rose-600" label="Missed" />
+        </div>
+      </section>
     </div>
   );
 };
 
-// Sub-component for Legend to keep code clean
-const LegendItem = ({ color, label }) => (
-  <div className="flex items-center gap-3 bg-slate-900/50 p-2 rounded-lg border border-slate-800">
-    <div className={`w-3 h-3 rounded-full ${color}`} />
-    <span className="text-[10px] font-medium text-slate-400 whitespace-nowrap">{label}</span>
+const LegendItem = ({ color, label, icon }) => (
+  <div className="flex items-center justify-between bg-slate-900/50 border border-slate-800 p-3 rounded-2xl">
+    <div className="flex items-center gap-3">
+      <div className={`w-3 h-3 rounded-full ${color} shadow-[0_0_8px_rgba(0,0,0,0.5)]`} />
+      <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{label}</span>
+    </div>
+    {icon && <span className="text-purple-400">{icon}</span>}
   </div>
 );
 
