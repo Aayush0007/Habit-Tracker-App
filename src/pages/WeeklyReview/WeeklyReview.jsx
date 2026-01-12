@@ -50,33 +50,46 @@ const WeeklyReview = () => {
 
   const handleLockReview = async () => {
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    const now = new Date();
-    const oneJan = new Date(now.getFullYear(), 0, 1);
-    const numberOfDays = Math.floor((now - oneJan) / (24 * 60 * 60 * 1000));
-    const weekNumber = Math.ceil((now.getDay() + 1 + numberOfDays) / 7);
-    const weekId = `${user.id}-${now.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
 
-    const { error } = await supabase
-      .from('weekly_reviews')
-      .upsert({
-        id: weekId,
-        user_id: user.id,
-        week_start_date: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        worked_well: reflection.workedWell,
-        improvements: reflection.improvements,
-        avg_hours: parseFloat(weeklyAvg),
-        discipline_score: Math.round((parseFloat(weeklyAvg) / 12) * 100)
-      });
+      // OPTIMIZED WEEK CALCULATION
+      // Find the most recent Monday to act as the week_start_date
+      const now = new Date();
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+      const monday = new Date(now.setDate(diff));
+      const weekStartDate = monday.toISOString().split('T')[0];
+      
+      // UNIQUE WEEK ID: USERID-YYYY-MM-DD (Start of week)
+      const weekId = `${user.id}-${weekStartDate}`;
 
-    if (error) {
-      showToast("Cloud Sync Error", "error");
-    } else {
-      showToast("Strategy Logged Successfully");
-      fetchWeeklyData(); // Refresh history list
+      const { error } = await supabase
+        .from('weekly_reviews')
+        .upsert({
+          id: weekId,
+          user_id: user.id,
+          week_start_date: weekStartDate,
+          worked_well: reflection.workedWell,
+          improvements: reflection.improvements,
+          avg_hours: parseFloat(weeklyAvg),
+          discipline_score: Math.round((parseFloat(weeklyAvg) / 12) * 100)
+        });
+
+      if (error) throw error;
+
+      showToast("Tactical Strategy Archived");
+      fetchWeeklyData();
+      // Clear current reflection inputs after save
+      setReflection({ workedWell: '', improvements: '' });
+      
+    } catch (error) {
+      console.error("Save Error:", error);
+      showToast(error.message || "Cloud Sync Error", "error");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   if (loading) return (
