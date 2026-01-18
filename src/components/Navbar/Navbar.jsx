@@ -22,13 +22,20 @@ const Navbar = () => {
 
   return (
     <>
-      {/* --- DESKTOP SIDEBAR (Visible on md screens and up) --- */}
-      <nav className="hidden md:flex fixed left-0 top-0 h-screen w-20 lg:w-64 bg-slate-950 border-r border-slate-800 flex-col py-8 z-50 transition-all duration-300">
-        <div className="px-6 mb-10 hidden lg:block">
-          <h1 className="text-xl font-black italic text-emerald-500 tracking-tighter uppercase">Warrior<span className="text-white">Mode</span></h1>
+      {/* --- DESKTOP SIDEBAR --- */}
+      {/* Added flex-col and overflow-hidden to main nav to contain the scrollable div */}
+      <nav className="hidden md:flex fixed left-0 top-0 h-screen w-20 lg:w-64 bg-slate-950 border-r border-slate-800 flex-col z-50 transition-all duration-300 overflow-hidden">
+        
+        {/* Fixed Header (Doesn't scroll) */}
+        <div className="px-6 py-8 hidden lg:block flex-shrink-0">
+          <h1 className="text-xl font-black italic text-emerald-500 tracking-tighter uppercase">
+            Warrior<span className="text-white">Mode</span>
+          </h1>
         </div>
 
-        <div className="flex flex-col gap-2 px-3">
+        {/* Scrollable Container */}
+        {/* overflow-y-auto + custom scrollbar hidden class */}
+        <div className="flex-1 flex flex-col gap-2 px-3 pb-8 overflow-y-auto no-scrollbar">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
@@ -37,7 +44,7 @@ const Navbar = () => {
               <Link 
                 key={item.path} 
                 to={item.path} 
-                className={`group flex items-center gap-4 p-3 rounded-2xl transition-all duration-300 ${
+                className={`group flex items-center gap-4 p-3 rounded-2xl transition-all duration-300 flex-shrink-0 ${
                   isActive ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-500 hover:text-slate-200 hover:bg-slate-900'
                 }`}
               >
@@ -51,7 +58,6 @@ const Navbar = () => {
                   {item.label}
                 </span>
                 
-                {/* Tooltip for collapsed desktop mode */}
                 <div className="absolute left-20 bg-slate-900 text-white text-[10px] px-3 py-1.5 rounded-md opacity-0 group-hover:opacity-100 pointer-events-none lg:hidden border border-slate-700 font-bold whitespace-nowrap z-50">
                   {item.label}
                 </div>
@@ -61,7 +67,7 @@ const Navbar = () => {
         </div>
       </nav>
 
-      {/* --- MOBILE BOTTOM BAR (Visible on screens smaller than md) --- */}
+      {/* --- MOBILE BOTTOM BAR --- */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-xl border-t border-slate-800/50 pb-safe z-50">
         <div className="flex justify-start items-center w-full overflow-x-auto no-scrollbar px-4 py-3 gap-2">
           {navItems.map((item) => {
@@ -79,10 +85,9 @@ const Navbar = () => {
                 <div className="relative transition-transform duration-300">
                   <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
                   {isActive && (
-                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-500 rounded-full border-2 border-slate-950 animate-pulse" />
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full border-2 border-slate-950 animate-pulse" />
                   )}
                 </div>
-                
                 <span className={`text-[8px] font-black uppercase tracking-widest mt-1 transition-all ${
                   isActive ? 'opacity-100' : 'opacity-40'
                 }`}>
@@ -94,8 +99,19 @@ const Navbar = () => {
         </div>
       </nav>
 
-      {/* Padding adjustment for content area to prevent layout overlap */}
+      {/* CSS Utilities and Layout Adjustments */}
       <style dangerouslySetInnerHTML={{ __html: `
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .no-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
+
         body { 
           padding-bottom: 5rem; 
         }
