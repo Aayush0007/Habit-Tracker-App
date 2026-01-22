@@ -32,6 +32,51 @@ const StudySessions = () => {
     const savedActive = localStorage.getItem("studyTimer_isActive");
     return savedActive === "true";
   });
+  // --- IST DAILY RESET WATCHER (12:01 AM IST) ---
+  useEffect(() => {
+    const checkAndScheduleReset = () => {
+      const now = new Date();
+      // Get current date string in IST format (YYYY-MM-DD)
+      const istDateStr = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(now);
+
+      const lastReset = localStorage.getItem("warrior_last_reset_ist");
+
+      // Immediate check: If saved date isn't today's IST date, wipe and reload
+      if (lastReset !== istDateStr) {
+        localStorage.removeItem("studyTimer_timeLeft");
+        localStorage.removeItem("studyTimer_isActive");
+        localStorage.setItem("warrior_last_reset_ist", istDateStr);
+        window.location.reload(); 
+        return;
+      }
+
+      // Schedule the next reload for 12:01 AM IST
+      const istNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+      const resetTarget = new Date(istNow);
+      resetTarget.setHours(0, 1, 0, 0);
+
+      if (istNow >= resetTarget) {
+        resetTarget.setDate(resetTarget.getDate() + 1);
+      }
+
+      const msUntilReset = resetTarget.getTime() - istNow.getTime();
+
+      const timeoutId = setTimeout(() => {
+        localStorage.setItem("warrior_last_reset_ist", ""); 
+        window.location.reload();
+      }, msUntilReset);
+
+      return timeoutId;
+    };
+
+    const timerId = checkAndScheduleReset();
+    return () => clearTimeout(timerId);
+  }, []);
 
   // Media Session Handlers
   useEffect(() => {
@@ -159,7 +204,7 @@ const StudySessions = () => {
       );
     }
   };
-  
+
   const handleStart = async () => {
     const primeAudio = (audio) => {
       audio
