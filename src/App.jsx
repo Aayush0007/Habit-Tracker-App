@@ -20,55 +20,66 @@ import { usePWAInstall } from "./hooks/usePWAInstall";
 function App() {
   const [session, setSession] = useState(null);
   const [initializing, setInitializing] = useState(true);
-
-  // Initialize PWA Logic
   const { deferredPrompt, installApp } = usePWAInstall();
 
   useEffect(() => {
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setInitializing(false);
+    let mounted = true;
+
+    const initSession = async () => {
+      // 5-Second Security Timeout: Prevents spinner hang if DNS block returns
+      const uplinkTimeout = setTimeout(() => {
+        if (mounted && initializing) {
+          setInitializing(false);
+        }
+      }, 5000);
+
+      try {
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        
+        if (mounted) {
+          setSession(initialSession);
+          setInitializing(false);
+          clearTimeout(uplinkTimeout);
+        }
+      } catch (err) {
+        console.error("Tactical Uplink Malfunction:", err.message);
+        if (mounted) setInitializing(false);
+      }
+    };
+
+    initSession();
+
+    // Real-time listener for login/logout events
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      if (mounted) {
+        setSession(currentSession);
+        setInitializing(false);
+      }
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  if (initializing)
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
-        <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-4" />
-        <p className="text-blue-500 font-black tracking-[0.3em] text-[10px] uppercase">
-          Booting Command Suite
-        </p>
-      </div>
-    );
+  if (initializing) return (
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
+      <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mb-4" />
+      <p className="text-emerald-500 font-black tracking-[0.3em] text-[10px] uppercase animate-pulse">Establishing Tactical Uplink...</p>
+    </div>
+  );
 
   if (!session) return <Auth />;
 
   return (
     <>
-      <Toaster />
+      <Toaster position="top-right" />
       <Router>
-        <div className="min-h-screen bg-slate-950 text-white pb-24">
+        <div className="min-h-screen bg-slate-950 dark:bg-slate-950 text-white transition-colors duration-500 pb-24">
           <Routes>
-            {/* Dashboard gets the Install Logic */}
-            <Route 
-              path="/" 
-              element={
-                <Dashboard 
-                  user={session.user} 
-                  canInstall={!!deferredPrompt} 
-                  onInstall={installApp} 
-                />
-              } 
-            />
-            
+            <Route path="/" element={<Dashboard user={session.user} canInstall={!!deferredPrompt} onInstall={installApp} />} />
             <Route path="/sessions" element={<StudySessions user={session.user} />} />
             <Route path="/tracker" element={<DailyTracker user={session.user} />} />
             <Route path="/mocks" element={<MockTests user={session.user} />} />
@@ -77,10 +88,8 @@ function App() {
             <Route path="/review" element={<WeeklyReview user={session.user} />} />
             <Route path="/settings" element={<Settings user={session.user} />} />
             <Route path="/syllabus" element={<SyllabusTracker user={session.user} />} />
-
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
-
           <Navbar />
         </div>
       </Router>
